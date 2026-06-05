@@ -1,13 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Pastikan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY ada
+// Ambil langsung dari environment variable
 const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
 const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 
+// Jika tidak ada di .env, hentikan aplikasi (jangan biarkan pakai simulator)
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase credentials in environment variables!");
+  console.error("SUPABASE ERROR: Environment variables tidak ditemukan!");
 }
 
+// Inisialisasi client yang murni, tanpa ada "bantuan" simulator
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   realtime: {
     params: {
