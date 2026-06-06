@@ -4450,6 +4450,7 @@ const updateStatus = async (orderId, nextStatus) => {
         {activeReceipt && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 print:absolute print:inset-0 print:bg-white print:z-50 print:flex print:items-start print:justify-center overflow-y-auto">
             <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-xl space-y-4 animate-fadeIn font-mono text-xs border border-[#EBE3D5] print-receipt-modal flex flex-col my-8">
+              
               <DigitalReceipt 
                 orderData={{
                   ...activeReceipt,
@@ -4493,3 +4494,7 @@ const updateStatus = async (orderId, nextStatus) => {
             </div>
           </div>
         )}
+      );
+    };
+
+    export default Admin;
