@@ -19,6 +19,8 @@ interface HomeProps {
 
 export default function Home({ onNavigate }: HomeProps) {
   const [tableNumber, setTableNumber] = useState<string | null>(null);
+  const [availableTables, setAvailableTables] = useState<string[]>([]);
+  const [showTableSelection, setShowTableSelection] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [error, setError] = useState('');
   const [logoSrc, setLogoSrc] = useState<string | null>(() => localStorage.getItem('scanbite_merchant_logo'));
@@ -28,60 +30,54 @@ export default function Home({ onNavigate }: HomeProps) {
   const [tableValidationError, setTableValidationError] = useState<string | null>(null);
 
   // Real-time validation function
-  const validateTableRealTime = async (tableNumToCheck: string) => {
+  const validateTableRealTime = async (tableNumToCheck: string): Promise<boolean> => {
     if (!supabase) return true; // Fail safe if no supabase connection
     
     setIsValidatingTable(true);
     setTableValidationError(null);
     try {
-      const activeTenant = localStorage.getItem('current_tenant') || 'scanbite_live';
-      
-      const { data: dbTables, error: queryErr } = await supabase
+      const { data, error: queryErr } = await supabase
         .from('sb_tables')
-        .select('*');
+        .select('*')
+        .or(`table_number.eq."${tableNumToCheck}",table_number.eq."${tableNumToCheck.padStart(2, '0')}",table_number.eq."${parseInt(tableNumToCheck, 10).toString()}"`)
+        .maybeSingle();
         
       if (queryErr) {
         console.warn('Real-time table lookup error:', queryErr.message);
-        return true; // Fail-safe: allow proceeding if DB query is blocked
+        return true; 
       }
       
-      if (dbTables && dbTables.length > 0) {
-        const formatNum = tableNumToCheck.padStart(2, '0');
-        const numOnly = parseInt(tableNumToCheck, 10).toString();
-        
-        const isFound = dbTables.some((tbl: any) => {
-          const colsToCheck = ['table_number', 'nomor_meja', 'nomor_meja_id', 'id'];
-          return colsToCheck.some(col => {
-            const val = tbl[col];
-            if (val === undefined || val === null) return false;
-            
-            const strVal = val.toString().trim().replace('Meja ', '');
-            return (
-              strVal === tableNumToCheck ||
-              strVal === formatNum ||
-              strVal === numOnly ||
-              tbl[col].toString() === `Meja ${tableNumToCheck}` ||
-              tbl[col].toString() === `Meja ${formatNum}`
-            );
-          });
-        });
-        
-        if (!isFound) {
-          setTableValidationError('Meja tidak terdaftar. Sistem mendeteksi kode QR atau nomor meja ini belum didaftarkan di database restoran. Silakan tanyakan ke pelayan atau kasir kami.');
-          return false;
+      if (data) {
+        // Validate if table is active (session_id is NULL)
+        if (data.session_id !== null) {
+          // It might be active, but let's just warn or allow. Based on requirements: "If NULL, inactive/disabled"
         }
+        return true;
+      } else {
+        setTableValidationError('Meja tidak ditemukan.');
+        return false;
       }
-      return true;
     } catch (err) {
       console.warn('Failed real-time table check:', err);
-      return true; // Fail-safe
+      return true;
     } finally {
       setIsValidatingTable(false);
     }
   };
 
-  // Read table parameter on mount and when URL search query changes
+  // Fetch available tables
+  const fetchAvailableTables = async () => {
+    if (!supabase) return;
+    const { data } = await supabase.from('sb_tables').select('table_number');
+    if (data) {
+      setAvailableTables(data.map(t => t.table_number.toString().padStart(2, '0')).sort());
+    }
+  };
+
+  // Read table parameter on mount
   useEffect(() => {
+    fetchAvailableTables();
+
     const params = new URLSearchParams(window.location.search);
     const table = params.get('table');
     const tenant = params.get('tenant');
@@ -89,58 +85,28 @@ export default function Home({ onNavigate }: HomeProps) {
       localStorage.setItem('current_tenant', tenant);
     }
     
-    let activeTable: string | null = null;
-    if (table) {
-      activeTable = table;
-      setTableNumber(table);
-      localStorage.setItem('scanbite_table', table);
-    } else {
-      // Fallback: check if table is already in localStorage from previous scans
-      const savedTable = localStorage.getItem('scanbite_table');
-      if (savedTable) {
-        activeTable = savedTable;
-        setTableNumber(savedTable);
-      }
-    }
-
-    if (activeTable) {
-      validateTableRealTime(activeTable);
-    }
+    const savedTable = localStorage.getItem('scanbite_table');
     
-    // Check if customer name already exists to prefill
-    const savedName = localStorage.getItem('scanbite_customer_name');
-    if (savedName) {
-      setCustomerName(savedName);
-    }
-
-    // Fetch dynamic store logo and cafe name from Supabase to match the logo settings
-    const fetchBrandingSettings = async () => {
-      if (!supabase) return;
-      try {
-        const activeTenant = localStorage.getItem('current_tenant') || 'scanbite_live';
-        const { data, error: fetchErr } = await supabase
-          .from('sb_settings')
-          .select('*')
-          .eq('kode_tenant', activeTenant)
-          .maybeSingle();
-
-        if (data) {
-          if (data.cafe_name) {
-            localStorage.setItem('scanbite_cafe_name', data.cafe_name);
-            setCafeNameText(data.cafe_name);
-          }
-          if (data.logo_url) {
-            localStorage.setItem('scanbite_merchant_logo', data.logo_url);
-            setLogoSrc(data.logo_url);
-          }
+    if (table) {
+      if (savedTable && savedTable !== table) {
+        // Mismatch
+        if (confirm("Anda sedang memindai meja baru. Ingin ganti meja?")) {
+          setTableNumber(table);
+          localStorage.setItem('scanbite_table', table);
+        } else {
+          setTableNumber(savedTable);
         }
-      } catch (err) {
-        console.warn('Failed to dynamically fetch branding settings in Home view:', err);
+      } else {
+        setTableNumber(table);
+        localStorage.setItem('scanbite_table', table);
       }
-    };
-
-    fetchBrandingSettings();
+    } else if (savedTable) {
+        setTableNumber(savedTable);
+    } else {
+        setShowTableSelection(true);
+    }
   }, []);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,7 +183,27 @@ export default function Home({ onNavigate }: HomeProps) {
         {/* Dynamic Card Content */}
         <div id="home-card" className="bg-white/80 backdrop-blur-md rounded-3xl p-6 shadow-xl shadow-[#2C2520]/5 border border-white/60">
           
-          {tableNumber ? (
+          {showTableSelection ? (
+            /* CASE 0: Table Selection Grid */
+            <div className="text-center animate-fadeIn">
+              <h2 className="text-xl font-bold text-[#1C1612] mb-6">Pilih Meja Anda</h2>
+              <div className="grid grid-cols-3 gap-3">
+                {availableTables.map(num => (
+                  <button
+                    key={num}
+                    onClick={() => {
+                        setTableNumber(num);
+                        localStorage.setItem('scanbite_table', num);
+                        setShowTableSelection(false);
+                    }}
+                    className="p-4 bg-[#FAF8F5] border border-[#EBE3D5] rounded-2xl hover:border-[#8C6239] transition-all font-bold text-[#8C6239]"
+                  >
+                    Meja {num}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : tableNumber ? (
             /* CASE 1: Table Detected - Show Check-in Form */
             <div>
               <div className="flex items-center gap-3 mb-6 pb-4 border-b border-[#F7F2EA]">
@@ -239,21 +225,6 @@ export default function Home({ onNavigate }: HomeProps) {
                   <p className="text-xs text-[#5B4E44] leading-relaxed font-bold">
                     {tableValidationError}
                   </p>
-                  
-                  <div className="bg-[#FAF8F5] border border-[#EBE3D5] rounded-2xl p-4 text-left space-y-2">
-                    <p className="text-[10px] uppercase font-black text-[#8C6239] tracking-wider mb-1">💡 Solusi Cepat:</p>
-                    <ul className="text-[11px] text-gray-500 font-semibold space-y-1.5 list-none pl-0">
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-[#8C6239] font-bold">✓</span> Scan kembali QR Code resmi yang tertempel pada meja fisik Anda.
-                      </li>
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-[#8C6239] font-bold">✓</span> Minta kasir/pelayan mendaftarkan Meja {tableNumber} terlebih dahulu di menu "Tambahkan Meja" pada panel Admin.
-                      </li>
-                      <li className="flex items-start gap-1.5">
-                        <span className="text-[#8C6239] font-bold">✓</span> Gunakan simulator meja sandbox di bawah untuk me-load meja pengujian yang sah.
-                      </li>
-                    </ul>
-                  </div>
                 </div>
               ) : (
                 <>
@@ -301,6 +272,13 @@ export default function Home({ onNavigate }: HomeProps) {
                       <span>Lihat Menu & Pesan</span>
                       <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                     </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowTableSelection(true)}
+                        className="w-full text-xs text-[#8C6239] font-bold py-2"
+                    >
+                        Pilih Meja Lain
+                    </button>
                   </form>
                 </>
               )}
@@ -313,31 +291,13 @@ export default function Home({ onNavigate }: HomeProps) {
               </div>
               
               <h2 className="text-xl font-bold text-[#1C1612] mb-2">QR Code Meja Diperlukan</h2>
-              <p className="text-sm text-[#786455] leading-relaxed mb-6">
-                Aplikasi ini berjalan secara mandiri dari meja kafe kami. Silakan scan QR Code yang tertera di meja fisik Anda untuk langsung membuka pesanan otomatis.
-              </p>
-
-              <div className="bg-[#FAF8F5] border border-[#EBE3D5] rounded-2xl p-4 text-left mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="w-2 h-2 rounded-full bg-[#8C6239]" />
-                  <p className="text-xs font-bold text-[#5B4E44] uppercase tracking-wider">Mengapa Scan QR?</p>
-                </div>
-                <ul className="text-xs text-[#786455] space-y-1.5 list-none pl-1">
-                  <li className="flex items-center gap-1.5">
-                    <span className="text-[#8C6239] font-bold">✓</span> Tanpa mengantre panjang di meja kasir kencang
-                  </li>
-                  <li className="flex items-center gap-1.5">
-                    <span className="text-[#8C6239] font-bold">✓</span> Split Bill Real-time (hitung per orang di meja)
-                  </li>
-                  <li className="flex items-center gap-1.5">
-                    <span className="text-[#8C6239] font-bold">✓</span> Request Lagu ke Jukebox kafe setelah checkout
-                  </li>
-                </ul>
-              </div>
+              
+              <button onClick={() => setShowTableSelection(true)} className="mt-4 bg-[#8C6239] text-white py-3 px-6 rounded-2xl">
+                Pilih Meja Manual
+              </button>
             </div>
           )}
 
-       
         </div>
 
       </main>

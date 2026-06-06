@@ -1,3 +1,4 @@
+import { QRCodeCanvas } from 'qrcode.react';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   ArrowLeft, 
@@ -164,6 +165,7 @@ export default function Admin({ onNavigate }: AdminProps) {
 
   // Tabs Navigation Selector
   const [activeTab, setActiveTab] = useState<'orders' | 'completed_history' | 'menu_management' | 'jukebox_controller' | 'qr_generator'>('orders');
+
   
   // States of synced database records
   const [orders, setOrders] = useState<CafeOrder[]>([]);
