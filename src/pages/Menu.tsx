@@ -104,6 +104,8 @@ export default function Menu({ onNavigate, cart, setCart }: MenuProps) {
     if (!supabase || !tableNumber) return;
     try {
       const cleanNum = tableNumber.replace('Meja ', '').trim();
+      const sessionStart = localStorage.getItem('scanbite_session_id')?.split('-')[1];
+
       const { data, error } = await supabase
         .from('sb_orders')
         .select('*')
@@ -113,7 +115,16 @@ export default function Menu({ onNavigate, cart, setCart }: MenuProps) {
         .limit(1);
 
       if (!error && data && data.length > 0) {
-        setActiveOrder(data[0]);
+        const order = data[0];
+        // Check if order belongs to current session (or is very recent)
+        // If the order created_at is older than a threshold (e.g. 1 hour), ignore it for new sessions
+        const orderTime = new Date(order.created_at).getTime();
+        const now = Date.now();
+        if (sessionStart && now - Number(sessionStart) > 1000 * 60 * 60 && now - orderTime > 1000 * 60 * 60) {
+            setActiveOrder(null);
+            return;
+        }
+        setActiveOrder(order);
       } else {
         // Fallback: read from local scanbite_orders cache for offline scenarios
         const localSaved = localStorage.getItem('scanbite_orders');
