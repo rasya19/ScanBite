@@ -4499,55 +4499,57 @@ export default function Admin({ onNavigate }: AdminProps) {
 
       </main>
 
-      {/* RENDER EMBEDDED KASIR PRINT RECEIPT PREVIEW MODAL */}
       {activeReceipt && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 print:absolute print:inset-0 print:bg-white print:z-50 print:flex print:items-start print:justify-center overflow-y-auto">
-          <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-xl space-y-4 animate-fadeIn font-mono text-xs border border-[#EBE3D5] print-receipt-modal flex flex-col my-8">
-            
-            {/* Render full digital receipt with item-wise details and split bills support */}
-            <DigitalReceipt 
-              orderData={{
-                ...activeReceipt,
-                table_number: activeReceipt.tableNumber,
-                customer_name: activeReceipt.customerName,
-                total_price: activeReceipt.totalPrice,
-                created_at: (activeReceipt as any).created_at || (activeReceipt as any).createdAtDate || new Date().toISOString(),
-                createdAt: (activeReceipt as any).createdAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                payment_method_label: activeReceipt.paymentMethod === 'cash' ? 'Tunai / Cash' : 'QRIS / E-Wallet',
-                payment_method: activeReceipt.paymentMethod,
-                amountPaid: activeReceipt.totalPrice,
-                changeAmount: 0
-              }} 
-              className="border-0 shadow-none p-0 w-full" 
-            />
+        <>
+          {/* RENDER EMBEDDED KASIR PRINT RECEIPT PREVIEW MODAL */}
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 print:absolute print:inset-0 print:bg-white print:z-50 print:flex print:items-start print:justify-center overflow-y-auto">
+            <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-xl space-y-4 animate-fadeIn font-mono text-xs border border-[#EBE3D5] print-receipt-modal flex flex-col my-8">
+              
+              {/* Render full digital receipt with item-wise details and split bills support */}
+              <DigitalReceipt 
+                orderData={{
+                  ...activeReceipt,
+                  table_number: activeReceipt.tableNumber,
+                  customer_name: activeReceipt.customerName,
+                  total_price: activeReceipt.totalPrice,
+                  created_at: (activeReceipt as any).created_at || (activeReceipt as any).createdAtDate || new Date().toISOString(),
+                  createdAt: (activeReceipt as any).createdAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  payment_method_label: activeReceipt.paymentMethod === 'cash' ? 'Tunai / Cash' : 'QRIS / E-Wallet',
+                  payment_method: activeReceipt.paymentMethod,
+                  amountPaid: activeReceipt.totalPrice,
+                  changeAmount: 0
+                }} 
+                className="border-0 shadow-none p-0 w-full" 
+              />
 
-            {/* Actions (Not visible during print) */}
-            <div className="grid grid-cols-2 gap-3 pt-2 print:hidden font-sans border-t border-dashed border-gray-300">
-              <button
-                type="button"
-                onClick={() => setActiveReceipt(null)}
-                className="border border-[#EBE3D5] hover:bg-gray-50 text-gray-600 text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer"
-              >
-                Tutup
-              </button>
+              {/* Actions (Not visible during print) */}
+              <div className="grid grid-cols-2 gap-3 pt-2 print:hidden font-sans border-t border-dashed border-gray-300">
+                <button
+                  type="button"
+                  onClick={() => setActiveReceipt(null)}
+                  className="border border-[#EBE3D5] hover:bg-gray-50 text-gray-600 text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer"
+                >
+                  Tutup
+                </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  try {
-                    window.print();
-                  } catch (err) {
-                    console.warn(err);
-                  }
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print Struk</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      window.print();
+                    } catch (err) {
+                      console.warn(err);
+                    }
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Struk</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
