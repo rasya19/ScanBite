@@ -4510,8 +4510,7 @@ const updateStatus = async (orderId, nextStatus) => {
               </div>
               {/* Hapus div ekstra di sini */}
             </div>
-          )}
-        </main>
+        </div>
 
         {/* RENDER EMBEDDED KASIR PRINT RECEIPT PREVIEW MODAL */}
         {activeReceipt && (
