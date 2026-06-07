@@ -1135,13 +1135,31 @@ export default function Admin({ onNavigate }: AdminProps) {
       try {
         // 1. Update orders status and payment status in Supabase so they are fully resolved
         if (orderId && !orderId.startsWith('sess-')) {
-          await supabase.from('sb_orders').update({ status: 'completed', payment_status: 'paid' }).eq('id', orderId);
+          const { error: orderError } = await supabase.from('sb_orders').update({ status: 'completed', payment_status: 'paid' }).eq('id', orderId);
+          if (orderError) {
+            console.error("DITOLAK SUPABASE KARENA:", orderError);
+            // Fallback: update only status to completed in case payment_status column does not exist or is malformed
+            const { error: fallbackError } = await supabase.from('sb_orders').update({ status: 'completed' }).eq('id', orderId);
+            if (fallbackError) {
+              console.error("DITOLAK SUPABASE KARENA (FALLBACK GAGAL):", fallbackError);
+            }
+          }
         } else {
           // If we only have table number or fake ID, complete all active & non-completed orders for this table
           const normalNum = parseInt(formattedMeja).toString();
-          await supabase.from('sb_orders').update({ status: 'completed', payment_status: 'paid' })
+          const { error: orderError } = await supabase.from('sb_orders').update({ status: 'completed', payment_status: 'paid' })
             .in('table_number', [formattedMeja, normalNum, `Meja ${formattedMeja}`, `Meja ${normalNum}`])
             .neq('status', 'completed');
+          if (orderError) {
+            console.error("DITOLAK SUPABASE KARENA:", orderError);
+            // Fallback: update only status to completed
+            const { error: fallbackError } = await supabase.from('sb_orders').update({ status: 'completed' })
+              .in('table_number', [formattedMeja, normalNum, `Meja ${formattedMeja}`, `Meja ${normalNum}`])
+              .neq('status', 'completed');
+            if (fallbackError) {
+              console.error("DITOLAK SUPABASE KARENA (FALLBACK GAGAL):", fallbackError);
+            }
+          }
         }
 
         // 2. IMPORTANT: Update the table status in Supabase sb_tables safely across potential column schemas
