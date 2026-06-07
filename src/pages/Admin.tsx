@@ -1019,6 +1019,58 @@ export default function Admin({ onNavigate }: AdminProps) {
     }
   };
 
+  const handleAddTable = async (tableNum: string) => {
+    const formattedNum = tableNum.padStart(2, '0');
+    if (tablesList.includes(formattedNum)) {
+      triggerNotification(`⚠️ Meja ${formattedNum} sudah terdaftar.`);
+      return;
+    }
+
+    const updatedList = [...tablesList, formattedNum].sort((a, b) => parseInt(a) - parseInt(b));
+    setTablesList(updatedList);
+    localStorage.setItem('scanbite_tables', JSON.stringify(updatedList));
+
+    const newTable = {
+      nomor_meja_id: formattedNum,
+      status: 'KOSONG' as const,
+      nama_pelanggan: '-'
+    };
+    const updatedDetails = [...tablesData, newTable];
+    setTablesData(updatedDetails);
+    localStorage.setItem('scanbite_tables_details', JSON.stringify(updatedDetails));
+    setIsTablesEmpty(false);
+
+    if (supabase) {
+      try {
+        const activeTenant = localStorage.getItem('current_tenant') || currentTenant || 'scanbite_live';
+        const { error: insErr } = await supabase
+          .from('sb_tables')
+          .insert({
+            tenant_id: activeTenant,
+            nomor_meja_id: formattedNum,
+            status: 'KOSONG',
+            nama_pelanggan: '-'
+          });
+        
+        if (insErr) {
+          await supabase
+            .from('sb_tables')
+            .insert({
+              tenant_id: activeTenant,
+              id: formattedNum,
+              table_number: formattedNum,
+              status: 'KOSONG'
+            });
+        }
+        triggerNotification(`🟢 Meja ${formattedNum} berhasil ditambahkan!`);
+      } catch (err: any) {
+        console.warn('Database insert table exception: ', err.message);
+      }
+    } else {
+      triggerNotification(`✓ Meja ${formattedNum} berhasil ditambahkan offline!`);
+    }
+  };
+
   const handleDeleteTable = async (tableNum: string) => {
     const confirmDelete = window.confirm(`Apakah Anda yakin ingin menghapus Meja ${tableNum} dari sistem?`);
     if (!confirmDelete) return;
@@ -2770,9 +2822,13 @@ export default function Admin({ onNavigate }: AdminProps) {
                               </button>
                             </div>
                           );
-                        })}
-                    </div>
+                        })()}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+            </div>
 
             {loading ? (
               <div className="bg-white border border-[#EBE3D5] rounded-3xl p-16 text-center text-[#9E8775]">
