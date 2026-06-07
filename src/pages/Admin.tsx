@@ -552,27 +552,6 @@ export default function Admin({ onNavigate }: AdminProps) {
     }, 3500);
   };
 
-  const normalizeTableNumber = (value?: string | number | null) => {
-    const raw = (value ?? '').toString().replace(/^Meja\s*/i, '').trim();
-    if (!raw) return '';
-
-    const numeric = raw.replace(/\D/g, '');
-    return numeric ? numeric.padStart(2, '0') : raw;
-  };
-
-  const normalizeDbTableStatus = (status?: string | null) => {
-    const normalized = (status || 'KOSONG').toUpperCase();
-    if (normalized === 'TERISI') return 'MEMILIH';
-    if (['KOSONG', 'MEMILIH', 'MELAYANI', 'SEDANG MAKAN'].includes(normalized)) {
-      return normalized;
-    }
-    return 'KOSONG';
-  };
-
-  const isActiveOrderStatus = (status?: string | null) => {
-    return ['pending', 'preparing', 'ready', 'menunggu', 'unpaid'].includes((status || '').toLowerCase());
-  };
-
   // Tactile PIN Input buttons click handler
   const handleKeyPress = (num: string) => {
     setLoginError(null);
@@ -823,7 +802,7 @@ export default function Admin({ onNavigate }: AdminProps) {
 
           return {
             id: ord.id.toString(),
-            tableNumber: normalizeTableNumber(ord.table_number || '05'),
+            tableNumber: ord.table_number || '05',
             customerName: ord.customer_name || itemsList[0]?.orderedBy || 'Pelanggan',
             items: itemsList,
             totalPrice: Number(ord.total_price) || itemsList.reduce((sum, i) => sum + (i.price * i.quantity), 0),
@@ -913,7 +892,7 @@ export default function Admin({ onNavigate }: AdminProps) {
         if (!error && dbTables) {
           liveDbTables = dbTables;
           activeTables = dbTables
-            .map((t: any) => normalizeTableNumber(t.table_number || t.nomor_meja || t.nomor_meja_id || t.id))
+            .map((t: any) => t.table_number?.toString().padStart(2, '0'))
             .filter(Boolean)
             .sort((a, b) => parseInt(a) - parseInt(b));
           
@@ -929,13 +908,13 @@ export default function Admin({ onNavigate }: AdminProps) {
 
     const baseDetails = activeTables.map(num => {
       const dbRow = liveDbTables?.find(t => {
-        const tNum = normalizeTableNumber(t.table_number || t.nomor_meja || t.nomor_meja_id || t.id);
+        const tNum = (t.table_number || t.nomor_meja || t.nomor_meja_id || t.id || '').toString().replace('Meja ', '').trim().padStart(2, '0');
         return tNum === num;
       });
       return {
         nomor_meja_id: num,
         nomor_meja: `Meja ${num}`,
-        status: normalizeDbTableStatus(dbRow?.status),
+        status: dbRow?.status || 'KOSONG',
         session_id: null,
         nama_pelanggan: '-'
       };
@@ -974,21 +953,25 @@ export default function Admin({ onNavigate }: AdminProps) {
       if (!error && ordersData) {
         const computedDetails = activeTables.map(num => {
           const dbRow = liveDbTables?.find(t => {
-            const tNum = normalizeTableNumber(t.table_number || t.nomor_meja || t.nomor_meja_id || t.id);
+            const tNum = (t.table_number || t.nomor_meja || t.nomor_meja_id || t.id || '').toString().replace('Meja ', '').trim().padStart(2, '0');
             return tNum === num;
           });
 
           const tableOrders = ordersData.filter(o => {
-            return normalizeTableNumber(o.table_number) === num;
+            const mVal = (o.table_number || '').toString();
+            return mVal.includes(num) || mVal.includes(parseInt(num).toString());
           });
 
-          const activeOrder = tableOrders.find(o => isActiveOrderStatus(o.status));
+          // Active order has payment_status !== 'paid'
+          const activeOrder = tableOrders.find(o => o.payment_status !== 'paid' && o.status !== 'completed');
 
-          const dbStatus = normalizeDbTableStatus(dbRow?.status);
+          const isTerisiInDb = dbRow?.status === 'TERISI';
 
-          let finalStatus = dbStatus;
+          let finalStatus = 'KOSONG';
           if (activeOrder) {
             finalStatus = activeOrder.status === 'pending' ? 'MELAYANI' : 'SEDANG MAKAN';
+          } else if (isTerisiInDb) {
+            finalStatus = 'TERISI';
           }
 
           return {
@@ -1034,62 +1017,6 @@ export default function Admin({ onNavigate }: AdminProps) {
     } finally {
         setLoading(false);
     }
-  };
-
-  const handleAddTable = async (tableNum: string) => {
-    const formattedNum = normalizeTableNumber(tableNum);
-    if (!formattedNum) return;
-
-    if (tablesList.includes(formattedNum)) {
-      triggerNotification(`⚠️ Meja ${formattedNum} sudah terdaftar.`);
-      return;
-    }
-
-    const nextTables = [...tablesList, formattedNum].sort((a, b) => Number(a) - Number(b));
-    const nextDetails = [
-      ...tablesData,
-      {
-        nomor_meja_id: formattedNum,
-        nomor_meja: `Meja ${formattedNum}`,
-        status: 'KOSONG',
-        session_id: null,
-        nama_pelanggan: '-'
-      }
-    ].sort((a, b) => Number(a.nomor_meja_id) - Number(b.nomor_meja_id));
-
-    setTablesList(nextTables);
-    setTablesData(nextDetails);
-    localStorage.setItem('scanbite_tables', JSON.stringify(nextTables));
-    localStorage.setItem('scanbite_tables_details', JSON.stringify(nextDetails));
-
-    if (supabase) {
-      try {
-        const activeTenant = localStorage.getItem('current_tenant') || currentTenant || 'scanbite_live';
-        const { data: existingTable } = await supabase
-          .from('sb_tables')
-          .select('id, table_number')
-          .eq('tenant_id', activeTenant)
-          .eq('table_number', formattedNum)
-          .maybeSingle();
-
-        if (existingTable) {
-          await supabase
-            .from('sb_tables')
-            .update({ status: 'KOSONG' })
-            .eq('tenant_id', activeTenant)
-            .eq('table_number', formattedNum);
-        } else {
-          await supabase
-            .from('sb_tables')
-            .insert([{ tenant_id: activeTenant, table_number: formattedNum, status: 'KOSONG' }]);
-        }
-      } catch (err: any) {
-        console.warn('Gagal menyimpan meja baru ke Supabase:', err.message);
-      }
-    }
-
-    triggerNotification(`🟢 Meja ${formattedNum} berhasil ditambahkan sebagai meja kosong.`);
-    await fetchTables();
   };
 
   const handleDeleteTable = async (tableNum: string) => {
@@ -1562,16 +1489,6 @@ export default function Admin({ onNavigate }: AdminProps) {
 
         if (error) throw error;
         
-        if (nextStatus === 'DELIVERED') {
-    await supabase
-      .from('sb_tables')
-      .update({ status: 'KOSONG', session_id: null }) // Sesuaikan dengan field di DB Bapak
-      .eq('table_number', currentTableNumber); // Pastikan Bapak punya variabel tableNumber-nya
-  }
-
-} catch (err) {
-  console.error("Error updating status:", err);
-}
         // Custom broadcast to instantly alert customers
         const channel1 = supabase.channel('client-orders-live');
         channel1.subscribe((status) => {
@@ -1585,38 +1502,33 @@ export default function Admin({ onNavigate }: AdminProps) {
         });
 
         const channel2 = supabase.channel('checkout-orders-live');
+        channel2.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            channel2.send({
+              type: 'broadcast',
+              event: 'order_updated',
+              payload: { orderId, status: nextStatus }
+            });
+          }
+        });
 
-    }// 1. Tambahkan kurung kurawal penutup untuk subscribe di sini
-          channel2.subscribe((status) => { // ... isi subscribe Bapak ...
-    }); // <--- INI WAJIB ADA AGAR SUBSCRIBE TERTUTUP
-
-// 2. Sekarang blok updateStatus Bapak jadi bersih dan tidak error
-const updateStatus = async (orderId, nextStatus) => {
-  if (supabase) {
-    try {
-      const { error } = await supabase
-        .from('sb_orders')
-        .update({ status: nextStatus })
-        .eq('id', orderId);
-
-      if (error) throw error;
-
-      triggerNotification(`🟢 Status pesanan #${orderId} diubah ke ${nextStatus.toUpperCase()}`);
-      fetchOrders();
-    } catch (err: any) {
-      alert(`Gagal query update: ${err.message}`);
+        triggerNotification(`🟢 Status pesanan #${orderId} diubah ke ${nextStatus.toUpperCase()}`);
+        fetchOrders();
+      } catch (err: any) {
+        alert(`Gagal query update: ${err.message}`);
+      }
+    } else {
+      setOrders((prev) => {
+        const updated = prev.map((ord) => 
+          ord.id === orderId ? { ...ord, status: nextStatus } : ord
+        );
+        localStorage.setItem('scanbite_orders', JSON.stringify(updated));
+        return updated;
+      });
+      triggerNotification(`✓ Simulasi: Status pesanan #${orderId} diubah ke ${nextStatus.toUpperCase()}`);
     }
-  } else {
-    setOrders((prev) => {
-      const updated = prev.map((ord) => 
-        ord.id === orderId ? { ...ord, status: nextStatus } : ord
-      );
-      localStorage.setItem('scanbite_orders', JSON.stringify(updated));
-      return updated;
-    });
-    triggerNotification(`✓ Simulasi: Status pesanan #${orderId} diubah ke ${nextStatus.toUpperCase()}`);
-  }
-};
+  };
+
   // Bulk archive or delete completed / finalized orders
   const handleClearAllCompletedOrders = async () => {
     const confirmClear = window.confirm(
@@ -2584,22 +2496,25 @@ const updateStatus = async (orderId, nextStatus) => {
                 }
               })();
 
-              const statsActiveOrders = orders.filter(o => isActiveOrderStatus(o.status)).length;
+              const statsActiveOrders = orders.filter(o => o.status === 'pending' || o.status === 'preparing').length;
 
               const statsOccupiedTables = tablesList.filter(num => {
-                const activeTableOrders = orders.filter(o => normalizeTableNumber(o.tableNumber) === num && isActiveOrderStatus(o.status));
+                const activeTableOrders = orders.filter(o => o.tableNumber === num && o.status !== 'delivered');
+                const hasOnlyDeliveredOrders = orders.some(o => o.tableNumber === num && o.status === 'delivered') && 
+                                               !orders.some(o => o.tableNumber === num && o.status !== 'delivered');
+                
                 const tblDetail = tablesData.find(t => t.nomor_meja_id === num);
-                const dbStatus = normalizeDbTableStatus(tblDetail?.status);
+                const dbStatus = tblDetail?.status || 'KOSONG';
                 
                 let tblStatus = 'KOSONG';
-                if (activeTableOrders.length > 0) {
+                if (dbStatus === 'SEDANG MAKAN' || (hasOnlyDeliveredOrders && dbStatus !== 'KOSONG')) {
+                  tblStatus = 'SEDANG MAKAN';
+                } else if (activeTableOrders.length > 0) {
                   tblStatus = 'MELAYANI';
                 } else if (dbStatus === 'MEMILIH') {
                   tblStatus = 'MEMILIH';
                 } else if (dbStatus === 'MELAYANI') {
                   tblStatus = 'MELAYANI';
-                } else if (dbStatus === 'SEDANG MAKAN') {
-                  tblStatus = 'SEDANG MAKAN';
                 }
                 return tblStatus !== 'KOSONG';
               }).length;
@@ -2666,41 +2581,33 @@ const updateStatus = async (orderId, nextStatus) => {
               </div>
 
               <div className="max-h-[340px] overflow-y-auto scrollbar-thin pr-1 pb-1.5">
-                {isTablesEmpty ? (
-                    <div className="flex flex-col items-center justify-center p-10 bg-white border border-dashed border-[#EBE3D5] rounded-2xl w-full">
-                        <p className="text-sm text-[#9E8775] mb-4">Belum ada meja yang terdaftar.</p>
-                        <button
-                            onClick={initializeTables}
-                            className="bg-[#8C6239] text-white px-5 py-3 rounded-xl text-sm font-bold shadow-sm hover:bg-[#6D4926]"
-                        >
-                            Inisialisasi Tabel Meja (01, 03, 05, 08, 12, 18)
-                        </button>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                      {tablesList.map((num) => {
-                    const activeTableOrders = orders.filter(o => normalizeTableNumber(o.tableNumber) === num && isActiveOrderStatus(o.status));
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {tablesList.map((num) => {
+                    const activeTableOrders = orders.filter(o => o.tableNumber === num && o.status !== 'delivered' && o.status !== 'completed');
+                    const hasOnlyDeliveredOrders = orders.some(o => o.tableNumber === num && (o.status === 'delivered' || o.status === 'completed')) && 
+                                                   !orders.some(o => o.tableNumber === num && o.status !== 'delivered' && o.status !== 'completed');
                     
                     const tblDetail = tablesData.find(t => t.nomor_meja_id === num);
-                    const dbStatus = normalizeDbTableStatus(tblDetail?.status);
+                    const dbStatus = tblDetail?.status || 'KOSONG';
                     
                     let status: 'KOSONG' | 'MEMILIH' | 'MELAYANI' | 'SEDANG MAKAN' = 'KOSONG';
                     let guestName = '-';
 
                     // Detect active payment that is unpaid (Menunggu Kasir / Verifikasi QRIS)
                     const unpaidOrder = orders.find(o => 
-                      normalizeTableNumber(o.tableNumber) === num &&
-                      isActiveOrderStatus(o.status) &&
+                      o.tableNumber === num && 
+                      o.status !== 'completed' && o.status !== 'delivered' &&
                       (o.paymentStatus === 'unpaid' || o.paymentStatus?.toLowerCase() === 'unpaid' || o.status === 'unpaid')
                     );
                     const isQrisPayment = unpaidOrder && (unpaidOrder.paymentMethod === 'qris' || unpaidOrder.paymentMethod?.toLowerCase() === 'qris' || unpaidOrder.paymentMethod === 'emoney');
 
-                    if (activeTableOrders.length > 0) {
-                      status = activeTableOrders.some(o => o.status === 'pending' || o.status === 'menunggu') ? 'MELAYANI' : 'SEDANG MAKAN';
-                      guestName = activeTableOrders[0].customerName;
-                    } else if (dbStatus === 'SEDANG MAKAN') {
+                    if (dbStatus === 'SEDANG MAKAN' || (hasOnlyDeliveredOrders && dbStatus !== 'KOSONG')) {
                       status = 'SEDANG MAKAN';
-                      guestName = tblDetail?.nama_pelanggan || 'Sajian Disajikan';
+                      const matchedOrder = orders.find(o => o.tableNumber === num);
+                      guestName = matchedOrder ? matchedOrder.customerName : (tblDetail?.nama_pelanggan || 'Sajian Disajikan');
+                    } else if (activeTableOrders.length > 0) {
+                      status = 'MELAYANI';
+                      guestName = activeTableOrders[0].customerName;
                     } else if (dbStatus === 'MEMILIH') {
                       status = 'MEMILIH';
                       guestName = tblDetail?.nama_pelanggan || 'Pelanggan Baru';
@@ -2766,7 +2673,7 @@ const updateStatus = async (orderId, nextStatus) => {
                           )}
 
                           {(() => {
-                            const tableActiveOrders = orders.filter(o => normalizeTableNumber(o.tableNumber) === num && isActiveOrderStatus(o.status));
+                            const tableActiveOrders = orders.filter(o => o.tableNumber === num && o.status !== 'completed' && o.status !== 'delivered');
                             const tableChangeAlerts = tableActiveOrders.flatMap(o => getCashChangeAlerts(o));
                             if (tableChangeAlerts.length === 0) return null;
                             return (
@@ -2864,12 +2771,7 @@ const updateStatus = async (orderId, nextStatus) => {
                             </div>
                           );
                         })}
-                      </div>
-                    );
-                  })}
-                  </div>
-                )}
-                </div>
+                    </div>
               </div>
 
             {loading ? (
@@ -4475,6 +4377,7 @@ const updateStatus = async (orderId, nextStatus) => {
                         <span className="absolute right-3.5 top-2.5 text-xs font-bold text-gray-400 font-mono">%</span>
                       </div>
                     </div>
+
                     <div>
                       <label className="block text-[10px] uppercase font-black text-[#786455] tracking-wider mb-1">Biaya Layanan (% Service)</label>
                       <div className="relative">
@@ -4496,8 +4399,6 @@ const updateStatus = async (orderId, nextStatus) => {
                     </div>
                   </div>
 
-                  {/* ... (kode input pajak & biaya layanan di atasnya tetap sama) ... */}
-
                   <div className="bg-[#FAF8F5] rounded-2xl p-4 border border-[#EBE3D5] space-y-1.5 text-left border-dashed">
                     <p className="text-[10px] font-black text-[#1C1612] uppercase tracking-wider flex items-center gap-1.5">
                       <span>📌</span> Ilustrasi Perhitungan POS
@@ -4508,59 +4409,63 @@ const updateStatus = async (orderId, nextStatus) => {
                   </div>
                 </div>
               </div>
-              {/* Hapus div ekstra di sini */}
-            </div>
-        </div>
 
-        {/* RENDER EMBEDDED KASIR PRINT RECEIPT PREVIEW MODAL */}
-        {activeReceipt && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 print:absolute print:inset-0 print:bg-white print:z-50 print:flex print:items-start print:justify-center overflow-y-auto">
-            <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-xl space-y-4 animate-fadeIn font-mono text-xs border border-[#EBE3D5] print-receipt-modal flex flex-col my-8">
-              
-              <DigitalReceipt 
-                orderData={{
-                  ...activeReceipt,
-                  table_number: activeReceipt.tableNumber,
-                  customer_name: activeReceipt.customerName,
-                  total_price: activeReceipt.totalPrice,
-                  created_at: (activeReceipt as any).created_at || (activeReceipt as any).createdAtDate || new Date().toISOString(),
-                  createdAt: (activeReceipt as any).createdAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                  payment_method_label: activeReceipt.paymentMethod === 'cash' ? 'Tunai / Cash' : 'QRIS / E-Wallet',
-                  payment_method: activeReceipt.paymentMethod,
-                  amountPaid: activeReceipt.totalPrice,
-                  changeAmount: 0
-                }} 
-                className="border-0 shadow-none p-0 w-full" 
-              />
-
-              <div className="grid grid-cols-2 gap-3 pt-2 print:hidden font-sans border-t border-dashed border-gray-300">
-                <button
-                  type="button"
-                  onClick={() => setActiveReceipt(null)}
-                  className="border border-[#EBE3D5] hover:bg-gray-50 text-gray-600 text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer"
-                >
-                  Tutup
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    try {
-                      window.print();
-                    } catch (err) {
-                      console.warn(err);
-                    }
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>Print Struk</span>
-                </button>
-              </div>
-            </div>
+             </div>
           </div>
         )}
-      );
-    };
 
-    export default Admin;
+      </main>
+
+      {/* RENDER EMBEDDED KASIR PRINT RECEIPT PREVIEW MODAL */}
+      {activeReceipt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 print:absolute print:inset-0 print:bg-white print:z-50 print:flex print:items-start print:justify-center overflow-y-auto">
+          <div className="bg-white p-6 rounded-3xl w-full max-w-sm shadow-xl space-y-4 animate-fadeIn font-mono text-xs border border-[#EBE3D5] print-receipt-modal flex flex-col my-8">
+            
+            {/* Render full digital receipt with item-wise details and split bills support */}
+            <DigitalReceipt 
+              orderData={{
+                ...activeReceipt,
+                table_number: activeReceipt.tableNumber,
+                customer_name: activeReceipt.customerName,
+                total_price: activeReceipt.totalPrice,
+                created_at: (activeReceipt as any).created_at || (activeReceipt as any).createdAtDate || new Date().toISOString(),
+                createdAt: (activeReceipt as any).createdAt || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                payment_method_label: activeReceipt.paymentMethod === 'cash' ? 'Tunai / Cash' : 'QRIS / E-Wallet',
+                payment_method: activeReceipt.paymentMethod,
+                amountPaid: activeReceipt.totalPrice,
+                changeAmount: 0
+              }} 
+              className="border-0 shadow-none p-0 w-full" 
+            />
+
+            {/* Actions (Not visible during print) */}
+            <div className="grid grid-cols-2 gap-3 pt-2 print:hidden font-sans border-t border-dashed border-gray-300">
+              <button
+                type="button"
+                onClick={() => setActiveReceipt(null)}
+                className="border border-[#EBE3D5] hover:bg-gray-50 text-gray-600 text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer"
+              >
+                Tutup
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    window.print();
+                  } catch (err) {
+                    console.warn(err);
+                  }
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider py-3.5 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Struk</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
