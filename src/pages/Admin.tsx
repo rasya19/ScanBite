@@ -308,7 +308,7 @@ export default function Admin({ onNavigate }: AdminProps) {
       `Meja ${formattedTable}`,
       `Meja ${normalTable}`
     ]));
-    const possibleColumns = ['table_number', 'nomor_meja', 'nomor_meja_id', 'id'];
+    const possibleColumns = ['table_number', 'nomor_meja', 'table_number', 'id'];
     const payloads = customerName
       ? [{ status, nama_pelanggan: customerName }, { status }]
       : [{ status }];
@@ -365,7 +365,7 @@ export default function Admin({ onNavigate }: AdminProps) {
     if (!formattedTable) return;
 
     setTablesData(prev => prev.map(t =>
-      isSameTableNumber(t.nomor_meja_id, formattedTable)
+      isSameTableNumber(t.table_number, formattedTable)
         ? {
             ...t,
             status: 'SEDANG MAKAN',
@@ -380,7 +380,7 @@ export default function Admin({ onNavigate }: AdminProps) {
       try {
         const parsed = JSON.parse(savedDetails);
         const updated = parsed.map((t: any) =>
-          isSameTableNumber(t.nomor_meja_id, formattedTable)
+          isSameTableNumber(t.table_number, formattedTable)
             ? {
                 ...t,
                 status: 'SEDANG MAKAN',
@@ -1029,11 +1029,11 @@ export default function Admin({ onNavigate }: AdminProps) {
 
     const baseDetails = activeTables.map(num => {
       const dbRow = liveDbTables?.find(t => {
-        const tNum = (t.table_number || t.nomor_meja || t.nomor_meja_id || t.id || '').toString().replace('Meja ', '').trim().padStart(2, '0');
+        const tNum = (t.table_number || t.nomor_meja || t.table_number || t.id || '').toString().replace('Meja ', '').trim().padStart(2, '0');
         return tNum === num;
       });
       return {
-        nomor_meja_id: num,
+        table_number: num,
         nomor_meja: `Meja ${num}`,
         status: dbRow?.status || 'KOSONG',
         session_id: null,
@@ -1047,9 +1047,9 @@ export default function Admin({ onNavigate }: AdminProps) {
         try {
           const parsed = JSON.parse(savedDetails);
           const alignedDetails = activeTables.map(num => {
-            const existing = parsed.find((p: any) => p.nomor_meja_id === num);
+            const existing = parsed.find((p: any) => p.table_number === num);
             return existing || {
-              nomor_meja_id: num,
+              table_number: num,
               nomor_meja: `Meja ${num}`,
               status: 'KOSONG',
               session_id: null,
@@ -1074,7 +1074,7 @@ export default function Admin({ onNavigate }: AdminProps) {
       if (!error && ordersData) {
         const computedDetails = activeTables.map(num => {
           const dbRow = liveDbTables?.find(t => {
-            const tNum = (t.table_number || t.nomor_meja || t.nomor_meja_id || t.id || '').toString().replace('Meja ', '').trim().padStart(2, '0');
+            const tNum = (t.table_number || t.nomor_meja || t.table_number || t.id || '').toString().replace('Meja ', '').trim().padStart(2, '0');
             return tNum === num;
           });
 
@@ -1100,7 +1100,7 @@ export default function Admin({ onNavigate }: AdminProps) {
           const tableOrder = servedOrder || activeOrder;
 
           return {
-            nomor_meja_id: num,
+            table_number: num,
             nomor_meja: `Meja ${num}`,
             status: finalStatus,
             session_id: tableOrder?.session_id || tableOrder?.id || dbRow?.session_id || null,
@@ -1156,7 +1156,7 @@ export default function Admin({ onNavigate }: AdminProps) {
     localStorage.setItem('scanbite_tables', JSON.stringify(updatedList));
 
     const newTable = {
-      nomor_meja_id: formattedNum,
+      table_number: formattedNum,
       status: 'KOSONG' as const,
       nama_pelanggan: '-'
     };
@@ -1172,7 +1172,7 @@ export default function Admin({ onNavigate }: AdminProps) {
           .from('sb_tables')
           .insert({
             tenant_id: activeTenant,
-            nomor_meja_id: formattedNum,
+            table_number: formattedNum,
             status: 'KOSONG',
             nama_pelanggan: '-'
           });
@@ -1205,7 +1205,7 @@ export default function Admin({ onNavigate }: AdminProps) {
     setTablesList(updatedList);
     localStorage.setItem('scanbite_tables', JSON.stringify(updatedList));
 
-    const updatedDetails = tablesData.filter(t => t.nomor_meja_id !== formattedNum);
+    const updatedDetails = tablesData.filter(t => t.table_number !== formattedNum);
     setTablesData(updatedDetails);
     localStorage.setItem('scanbite_tables_details', JSON.stringify(updatedDetails));
 
@@ -1213,7 +1213,7 @@ export default function Admin({ onNavigate }: AdminProps) {
       try {
         const activeTenant = localStorage.getItem('current_tenant') || currentTenant || 'scanbite_live';
         // Try deleting matching multiple potential schemas
-        const possibleColumns = ['table_number', 'nomor_meja', 'nomor_meja_id', 'id'];
+        const possibleColumns = ['table_number', 'nomor_meja', 'table_number', 'id'];
         for (const col of possibleColumns) {
           try {
             const { error: delErr } = await supabase
@@ -1249,7 +1249,7 @@ export default function Admin({ onNavigate }: AdminProps) {
       } else {
         const matchedTable = tablesData.find(t => t.session_id === tableNum);
         if (matchedTable) {
-          finalTableNum = matchedTable.nomor_meja_id;
+          finalTableNum = matchedTable.table_number;
         }
       }
     }
@@ -1282,7 +1282,7 @@ export default function Admin({ onNavigate }: AdminProps) {
             : o
         ));
         setTablesData(prev => prev.map(t => 
-          isSameTableNumber(t.nomor_meja_id, formattedMeja)
+          isSameTableNumber(t.table_number, formattedMeja)
             ? { ...t, status: 'KOSONG', session_id: null, nama_pelanggan: '-' }
             : t
         ));
@@ -1292,7 +1292,7 @@ export default function Admin({ onNavigate }: AdminProps) {
           try {
             const parsed = JSON.parse(savedDetails);
             const updated = parsed.map((t: any) =>
-              isSameTableNumber(t.nomor_meja_id, formattedMeja)
+              isSameTableNumber(t.table_number, formattedMeja)
                 ? { ...t, status: 'KOSONG', session_id: null, nama_pelanggan: '-' }
                 : t
             );
@@ -1353,7 +1353,7 @@ export default function Admin({ onNavigate }: AdminProps) {
     }
 
     setTablesData(prev => prev.map(t => 
-      isSameTableNumber(t.nomor_meja_id, formattedMeja)
+      isSameTableNumber(t.table_number, formattedMeja)
         ? { ...t, status: 'KOSONG', session_id: null, nama_pelanggan: '-' }
         : t
     ));
@@ -1405,7 +1405,7 @@ export default function Admin({ onNavigate }: AdminProps) {
     let tableNumToUpdate = '';
     const matchedTableBySession = tablesData.find(t => t.session_id === sessionId);
     if (matchedTableBySession) {
-      tableNumToUpdate = matchedTableBySession.nomor_meja_id;
+      tableNumToUpdate = matchedTableBySession.table_number;
     } else {
       const matchedOrder = orders.find(o => o.sessionId === sessionId || o.id === sessionId);
       if (matchedOrder) {
@@ -1416,7 +1416,7 @@ export default function Admin({ onNavigate }: AdminProps) {
     if (tableNumToUpdate) {
       setTablesData(prev => 
         prev.map(t => 
-          t.nomor_meja_id === tableNumToUpdate 
+          t.table_number === tableNumToUpdate 
             ? { ...t, status: 'SEDANG MAKAN' } 
             : t
         )
@@ -1427,7 +1427,7 @@ export default function Admin({ onNavigate }: AdminProps) {
         try {
           const parsed = JSON.parse(savedDetails);
           const updated = parsed.map((t: any) => 
-            t.nomor_meja_id === tableNumToUpdate 
+            t.table_number === tableNumToUpdate 
               ? { ...t, status: 'SEDANG MAKAN' } 
               : t
           );
@@ -2708,7 +2708,7 @@ export default function Admin({ onNavigate }: AdminProps) {
                 const servedTableOrders = orders.filter(o => isSameTableNumber(o.tableNumber, num) && isServedOrderStatus(o.status));
                 const hasServedOrders = servedTableOrders.length > 0;
                 
-                const tblDetail = tablesData.find(t => t.nomor_meja_id === num);
+                const tblDetail = tablesData.find(t => t.table_number === num);
                 const dbStatus = tblDetail?.status || 'KOSONG';
                 
                 const sessionGuest = tblDetail?.nama_pelanggan;
@@ -2810,7 +2810,7 @@ export default function Admin({ onNavigate }: AdminProps) {
                     const servedTableOrders = orders.filter(o => isSameTableNumber(o.tableNumber, num) && isServedOrderStatus(o.status));
                     const servedOrder = servedTableOrders[0];
                     
-                    const tblDetail = tablesData.find(t => t.nomor_meja_id === num);
+                    const tblDetail = tablesData.find(t => t.table_number === num);
                     const dbStatus = tblDetail?.status || 'KOSONG';
                     
                     let status: 'KOSONG' | 'MEMILIH' | 'MELAYANI' | 'SEDANG MAKAN' = 'KOSONG';
